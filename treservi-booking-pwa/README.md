@@ -65,7 +65,7 @@ sequenceDiagram
 
 **Leaving the backend-as-a-service.** Moving from Supabase to my own Express API meant writing authentication, validation and queries myself. In exchange, the booking rules below live in one place that I control and can test, instead of being spread across database policies and client code.
 
-**One shared database, `salon_id` on every document.** A salon is a tenant, and its unique slug forms the public URL and the QR code. A database per tenant would have been overkill for a handful of salons on a free Atlas cluster. The price is that isolation depends on the API applying the salon filter correctly on every route. See the first item under "What I'd improve next".
+**One shared database, `salon_id` on every document.** A salon is a tenant, and its unique slug forms the public URL and the QR code. A database per tenant would have been overkill for a handful of salons on a free Atlas cluster. The price is that isolation depends on the API applying the salon filter correctly on every route, which is exactly where I later found bugs (see the authorization audit below).
 
 **QR self-booking without customer accounts, with abuse controls.** Asking customers to create an account adds friction at the counter. Instead, the owner's dashboard generates a QR code with the salon's booking URL. The customer books with a name and a phone number and gets a 6-character booking code. The code uses an alphabet without look-alike characters such as 0/O and 1/I. The code plus the phone number lets the customer cancel or reschedule later. With no login, the API enforces:
 
@@ -74,6 +74,8 @@ sequenceDiagram
 - no duplicate booking by the same phone for the same slot
 - at most three bookings per phone per hour (`429`)
 - cancellation only up to 30 minutes before the appointment
+
+**Authorization audit: pin the tenant to the token, not the request.** When I reviewed every route, I found that many only checked that the caller was logged in. A staff member could read another salon's staff list by passing a different `salonId`, edit any user through a PATCH that passed the whole request body to the database (including `role`), and delete owners. Password hashes were also serialized in responses. I fixed it in one place instead of route by route: a `requireRole` guard, a `resolveSalonId` helper that pins owners and staff to the salon in their token (only a super-admin may choose another one), explicit field whitelists for every update, ownership checks *before* any write, and `passwordHash` excluded at the model level. Integration tests (supertest + in-memory MongoDB) now try the cross-tenant and privilege-escalation attacks and must fail. The lesson: in a shared-database design, tenant isolation has to be a default enforced by shared code, not something each handler remembers.
 
 **Roles in the token, stricter limits on sensitive routes.** The JWT carries the role (super-admin, owner or staff) and the salon. The super-admin API is mounted on a configurable base path and has its own rate limiter. Auth routes have their own rate limiter. Only that salon's owner or a super-admin can edit salon settings. Helmet sets the security headers, and seed routes only exist when an environment flag enables them.
 
@@ -89,7 +91,7 @@ So offline support covers the app shell, not the data.
 
 ## What I'd improve next
 
-- **Central tenant and role enforcement.** Today some routes rely on their own per-route checks, and not all of them verify that the resource belongs to the caller's salon or that the caller's role allows the action. The fix is middleware that takes the salon ID from the token, not from the request, plus a `requireRole` guard, plus tests that attempt cross-tenant access. This is the first thing I'm fixing.
+- **Short-lived tokens.** The role and salon live in a JWT that is valid for 7 days, so a demoted or deleted user keeps access until it expires. Short access tokens plus refresh tokens, or a token version checked on each request, would close that gap.
 - **Prevent double bookings at the database.** The conflict check reads first and then inserts. A unique partial index on salon, staff, date and time for active bookings would make the check atomic.
 - **Live dashboards on top of push.** The service worker already posts a message to open tabs when a push arrives. The dashboard should listen for it and refetch.
 - **Real offline writes or none.** A background-sync handler exists, but nothing queues requests for it yet. I would either queue writes in IndexedDB or remove the handler.
