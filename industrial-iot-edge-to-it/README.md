@@ -2,7 +2,7 @@
 
 > Written from memory of my internship work; no proprietary code or data is included. I describe internal systems, sites and message catalogues generically.
 
-Socomec Group, IT department, 2026. My role: I designed the target architecture and wrote its technical specification. That covered the transport layer, the topic convention, QoS and security rules, the payload contracts, the design of the C# gateway service, the data-access rules and the Grafana dashboards.
+Socomec Group, IT department, 2026. My role: I designed the target architecture and wrote its technical specification. That covered the transport layer, the topic convention, QoS and security rules, the payload contracts, the design of the C# gateway service, the data-access rules and the Grafana dashboards. I then built a working prototype of the edge-to-IT path (Node-RED flows with store-and-forward, and the .NET 8 gateway worker) to validate the design before the production implementation.
 
 ## Context and problem
 

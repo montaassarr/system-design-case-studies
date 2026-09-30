@@ -75,14 +75,14 @@ So far only one schema version is implemented. For any other version, the factor
 
 The trade-off is that discriminators must never change once published.
 
-**Audit trail with field-level diffs and a mandatory reason.** Before calling the API, the UI opens a reason dialog, and every create, update and delete requires a change reason. For updates, the handler compares the stored entity with the incoming one property by property and serializes the differences as JSON (`{"Field": {"Old": ..., "New": ...}}`). It then dispatches a history command with:
+**Audit trail with field-level diffs and a mandatory reason.** Before calling the API, the UI opens a reason dialog, and every create, update and delete requires a change reason. For every mutation, the audit mechanism intercepts the command, compares the stored entity with the incoming one property by property, and serializes the differences as JSON (`{"Field": {"Old": ..., "New": ...}}`). It then records a history entry with:
 
 - the entity, its key and the action
 - the diff and the reason
 - the user and a UTC timestamp
 - the factory connection
 
-Batch imports write one history record per row. I chose explicit dispatch from each handler rather than an EF Core `SaveChanges` interceptor for two reasons. First, the reason and the business description are only known in the handler, not in the ORM. Second, history lives in a different database from the data it describes. The cost is that the audit trail depends on discipline: a new handler could forget to dispatch. Also, the data write and the history write are not in one transaction.
+Batch imports write one history record per row. The audit hooks into the command pipeline rather than the ORM for two reasons. First, the reason and the business description are only known at the command level, not in EF Core. Second, history lives in a different database from the data it describes. The cost is that the data write and the history write are not in one transaction, so a failure between them needs a retry or a reconciliation job.
 
 **Excel parsing in the Blazor app, typed batches to the API.**
 
